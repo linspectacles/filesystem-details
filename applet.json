@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "linspectacles-filesystem-details",
+  "name": "Filesystem Details",
+  "version": "0.0.8",
+  "author": "brunonlinespace",
+  "editor": "brunonlinespace",
+  "publisher": "brunonlinespace",
+  "organization_id": "linspectacles",
+  "organization_url": "https://github.com/linspectacles/",
+  "repository": "https://github.com/linspectacles/filesystem-details",
+  "order": 50,
+  "entrypoint": "filesystem_details/applet.py",
+  "factory": "create_applet",
+  "standalone": "standalone.py",
+  "description": "Read-only structural filesystem inspector for selected mounted ext4, XFS and Btrfs filesystems, with filesystem-native summary and allocation details plus explicit physical-map acquisition.",
+  "platforms": [
+    "linux"
+  ],
+  "read_only": true
+}
