@@ -661,6 +661,19 @@ FMR_OWN_FREE = 1
 FMR_OWN_UNKNOWN = 2
 FMR_OWN_METADATA = 3
 
+# FS_IOC_GETFSMAP special owners are interpreted in the context of the
+# selected filesystem.  ext4 deliberately shares some FMR_OWNER('X', n)
+# identifiers with XFS, but they must not be shown as XFS-owned records.
+_EXT4_SPECIAL_OWNERS = {
+    (ord("X") << 32) | 1: "ext4 Filesystem Metadata",
+    (ord("X") << 32) | 2: "ext4 Journal Log",
+    (ord("X") << 32) | 5: "ext4 Inodes",
+    (ord("f") << 32) | 1: "ext4 Group Descriptors",
+    (ord("f") << 32) | 2: "ext4 Reserved Group Descriptors",
+    (ord("f") << 32) | 3: "ext4 Block Bitmap",
+    (ord("f") << 32) | 4: "ext4 Inode Bitmap",
+}
+
 _XFS_SPECIAL_OWNERS = {
     (ord("X") << 32) | 1: "XFS Filesystem Metadata",
     (ord("X") << 32) | 2: "XFS Journal Log",
@@ -673,7 +686,7 @@ _XFS_SPECIAL_OWNERS = {
 }
 
 
-def _fsmap_owner(owner, flags):
+def _fsmap_owner(owner, flags, fstype):
     owner = int(owner)
     if not (int(flags) & FMR_OF_SPECIAL_OWNER):
         return str(owner)
@@ -683,7 +696,11 @@ def _fsmap_owner(owner, flags):
         return "Unknown Owner"
     if owner == FMR_OWN_METADATA:
         return "Filesystem Metadata"
-    return _XFS_SPECIAL_OWNERS.get(owner, f"Special Owner 0x{owner:016x}")
+    special_owners = {
+        "ext4": _EXT4_SPECIAL_OWNERS,
+        "xfs": _XFS_SPECIAL_OWNERS,
+    }.get(str(fstype).lower(), {})
+    return special_owners.get(owner, f"Special Owner 0x{owner:016x}")
 
 
 def _fsmap_flags(flags):
@@ -705,12 +722,32 @@ def _fsmap_flags(flags):
 def filesystem_map(record, max_records=100000, batch_size=256):
     """Retrieve a read-only FS_IOC_GETFSMAP snapshot for the selected mount."""
     mount_point = str(record.get("mount_point", ""))
+    fstype = str(record.get("fstype", "")).lower()
     rows = []
     status = {"source": "FS_IOC_GETFSMAP", "truncated": False, "error": ""}
+
+    # The deep Btrfs allocation provider does not imply support for GETFSMAP.
+    # Check the filesystem type before opening the mount or issuing an ioctl.
+    if fstype == "btrfs":
+        status["error"] = (
+            "Btrfs does not expose FS_IOC_GETFSMAP. "
+            "Summary and Allocation inspection remain available."
+        )
+        return rows, status
+    if fstype not in {"ext4", "xfs"}:
+        status["error"] = (
+            f"FS_IOC_GETFSMAP is not supported for filesystem type {fstype or 'unknown'} "
+            "in this inspector."
+        )
+        return rows, status
+
     try:
         fd = _open_mountpoint(mount_point)
     except OSError as exc:
-        status["error"] = f"open error: {exc}"
+        if exc.errno in {errno.EACCES, errno.EPERM}:
+            status["error"] = "Permission denied opening the selected mount for physical mapping."
+        else:
+            status["error"] = f"Cannot open the selected mount: {exc}"
         return rows, status
     try:
         head_size = ctypes.sizeof(FsMapHead)
@@ -746,7 +783,7 @@ def filesystem_map(record, max_records=100000, batch_size=256):
                     "physical_start": int(rec.fmr_physical),
                     "physical_end": int(rec.fmr_physical + rec.fmr_length - 1) if rec.fmr_length else int(rec.fmr_physical),
                     "length": int(rec.fmr_length),
-                    "owner": _fsmap_owner(rec.fmr_owner, rec.fmr_flags),
+                    "owner": _fsmap_owner(rec.fmr_owner, rec.fmr_flags, fstype),
                     "owner_raw": int(rec.fmr_owner),
                     "logical_offset": int(rec.fmr_offset),
                     "flags": _fsmap_flags(rec.fmr_flags),
@@ -764,7 +801,14 @@ def filesystem_map(record, max_records=100000, batch_size=256):
             status["truncated"] = True
         status["device_values_are_dev_t"] = bool(int(head.fmh_oflags) & FMH_OF_DEV_T) if 'head' in locals() else False
     except OSError as exc:
-        status["error"] = f"unavailable: {exc}"
+        if exc.errno in {errno.ENOTTY, errno.EOPNOTSUPP}:
+            status["error"] = (
+                f"FS_IOC_GETFSMAP is not supported for {fstype} on this kernel/filesystem."
+            )
+        elif exc.errno in {errno.EACCES, errno.EPERM}:
+            status["error"] = "Permission denied by the kernel during physical-map acquisition."
+        else:
+            status["error"] = f"FS_IOC_GETFSMAP request failed: {exc}"
     finally:
         os.close(fd)
     return rows, status

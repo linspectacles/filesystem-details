@@ -4,7 +4,7 @@
 
 Filesystem Details is a read-only LinSpectacles applet for deep structural inspection of a selected mounted filesystem.
 
-Current release: **0.0.8**
+Current release: **0.0.10**
 
 Repository: <https://github.com/linspectacles/filesystem-details>
 
@@ -209,7 +209,7 @@ python -m pip install PyQt6
 python3 linspectacles_filesystem_details/standalone.py
 ```
 
-Filesystem-specific information comes from the Linux interfaces described under **Data sources and acquisition**; no separate userspace filesystem-analysis suite is required for the implemented 0.0.8 providers.
+Filesystem-specific information comes from the Linux interfaces described under **Data sources and acquisition**; no separate userspace filesystem-analysis suite is required for the implemented 0.0.10 providers.
 
 No RPM installation instructions are included in this README.
 

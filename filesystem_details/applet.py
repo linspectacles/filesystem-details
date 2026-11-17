@@ -6,7 +6,7 @@
 
 APPLET_ID = "linspectacles-filesystem-details"
 APPLET_NAME = "Filesystem Details"
-APPLET_VERSION = "0.0.8"
+APPLET_VERSION = "0.0.10"
 APPLET_AUTHOR = "brunonlinespace"
 APPLET_EDITOR = "brunonlinespace"
 APPLET_ORGANIZATION_ID = "linspectacles"
